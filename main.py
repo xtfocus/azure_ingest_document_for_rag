@@ -1,17 +1,40 @@
+import contextlib
 import json
 import os
 import time
 from functools import lru_cache
 from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException
+import fastapi
+from fastapi import HTTPException
 from loguru import logger
+from models import CustomSkillException, ModelConfig, RequestData
 from openai import AsyncAzureOpenAI
 
-from models import CustomSkillException, ModelConfig, RequestData
 from utils import format_response, prepare_messages
 
-app = FastAPI()
+clients = {}
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app: fastapi.FastAPI):
+
+    config = ModelConfig()
+
+    client = AsyncAzureOpenAI(
+        api_key=config.api_key,
+        api_version=config.api_version,
+        azure_endpoint=config.endpoint,
+        timeout=config.timeout,
+        max_retries=config.retry_attempts,
+    )
+
+    clients["chat-completion-model"] = client
+    yield
+    await clients["chat-completion-model"].close()
+
+
+app = fastapi.FastAPI(docs_url="/", lifespan=lifespan)
 
 
 @lru_cache(maxsize=1)
@@ -41,19 +64,11 @@ def validate_environment() -> tuple[str, str]:
 
 
 async def call_azure_openai(
-    payload: Dict[str, Any], config: ModelConfig
+    client, payload: Dict[str, Any], config: ModelConfig
 ) -> Dict[str, Any]:
     """Make HTTP request to Azure OpenAI using official async client."""
 
     try:
-
-        client = AsyncAzureOpenAI(
-            api_key=config.api_key,
-            api_version=config.api_version,
-            azure_endpoint=config.endpoint,
-            timeout=config.timeout,
-            max_retries=config.retry_attempts,
-        )
 
         logger.info(f"Sending request to Azure OpenAI: {payload}")
 
@@ -123,6 +138,7 @@ async def custom_skill(request: RequestData, scenario: str):
                 }
 
                 response_json = await call_azure_openai(
+                    clients["chat-completion-model"],
                     payload=request_payload,
                     config=config,
                 )
