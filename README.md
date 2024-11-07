@@ -1,28 +1,111 @@
-# Azure Open AI Custom Inference Skill
+# Azure OpenAI Custom Inference API
 
----
+## Local Development
 
-Quickstart Guide:
+### Prerequisites
+- Python 3.8+
+- pip
+- virtualenv
 
-- This folder illustrates how to leverage Azure AI Studio to summarize a large piece of text using [custom web api skills](https://learn.microsoft.com/en-us/azure/search/cognitive-search-custom-skill-web-api).
+### Setup
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd <repository-name>
+```
 
-- As a prerequisite to running this custom skill, you must first deploy a model to Azure. See [this guide](https://learn.microsoft.com/en-us/azure/ai-studio/how-to/deploy-models-openai) for reference.
+2. Create and activate virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-- in the *local.settings.json* file, set your "AZURE_INFERENCE_CREDENTIAL" value to the API key of your deployed model. Set the "AZURE_CHAT_COMPLETION_ENDPOINT" environment variable to the url where your model is hosted
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-- Once you are in this folder, you need to install the Azure functions Visual Studio extension and update the core tools. After that, you should run func start as descibed in this [python quickstart for Azure functions](https://learn.microsoft.com/en-us/azure/azure-functions/create-first-function-cli-python?tabs=windows%2Cbash%2Cazure-cli%2Cbrowser).
+4. Create `.env` file with required environment variables:
+```
+AZURE_OPENAI_KEY=your_key_here
+AZURE_OPENAI_ENDPOINT=your_endpoint_here
+```
 
-- A sample payload is provided in the *api-test.http* file. Replace the localhostBaseUrl variable with the base url of your container/local http environment. Once you install the Visual Studio REST Client extension, you can hit the Send Request button from that file.
+### Running Locally
 
-- The currently demonstrated set of custom skills in this repository are about using chat completion models to do entity recognition, summarization and image-captioning.
+1. Development server:
+```bash
+uvicorn app:app --reload --port 8000
+```
 
-- When it comes time to deploy your code in Azure, you can follow [this guide for setting up your Python function](https://learn.microsoft.com/en-us/azure/azure-functions/create-first-function-cli-python?tabs=windows%2Cbash%2Cazure-cli%2Cbrowser#create-supporting-azure-resources-for-your-function)
+2. Production server using Gunicorn (Linux/Mac):
+```bash
+gunicorn app:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
+```
 
-Languages:
+### API Documentation
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
-- ![python](https://img.shields.io/badge/language-python-orange)
+## Azure Container Apps Deployment
 
-Products:
+### Prerequisites
+- Azure CLI
+- Docker
 
-- Azure AI Studio
-- Azure Functions
+### Deployment Steps
+
+1. Login to Azure:
+```bash
+az login
+```
+
+2. Create Resource Group (if needed):
+```bash
+az group create --name myResourceGroup --location eastus
+```
+
+3. Create Azure Container Registry:
+```bash
+az acr create --resource-group myResourceGroup --name myacrname --sku Basic
+az acr login --name myacrname
+```
+
+4. Build and push Docker image:
+```bash
+docker build -t myacrname.azurecr.io/customskill:v1 .
+docker push myacrname.azurecr.io/customskill:v1
+```
+
+5. Create Container App:
+```bash
+az containerapp create \
+  --name my-container-app \
+  --resource-group myResourceGroup \
+  --image myacrname.azurecr.io/customskill:v1 \
+  --target-port 8000 \
+  --ingress external \
+  --env-vars \
+    AZURE_OPENAI_KEY=your_key_here \
+    AZURE_OPENAI_ENDPOINT=your_endpoint_here
+```
+
+### Testing Deployment
+```bash
+curl https://your-app-url/api/health
+```
+
+3. Create a Dockerfile:
+
+```dockerfile
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["gunicorn", "app:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
+```
