@@ -8,9 +8,9 @@ from typing import Any, Dict
 import fastapi
 from fastapi import HTTPException
 from loguru import logger
-from models import CustomSkillException, ModelConfig, RequestData
 from openai import AsyncAzureOpenAI
 
+from models import CustomSkillException, ModelConfig, RequestData
 from utils import format_response, prepare_messages
 
 clients = {}
@@ -69,9 +69,6 @@ async def call_azure_openai(
     """Make HTTP request to Azure OpenAI using official async client."""
 
     try:
-
-        logger.info(f"Sending request to Azure OpenAI: {payload}")
-
         response = await client.chat.completions.create(
             model=config.model_deployment,
             messages=payload["messages"],
@@ -79,8 +76,6 @@ async def call_azure_openai(
             top_p=payload.get("top_p", None),
             max_tokens=payload.get("max_tokens", 4096),
         )
-
-        logger.info("Successfully received response from Azure OpenAI.")
 
         return response.model_dump()
 
