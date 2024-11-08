@@ -10,13 +10,14 @@ from typing import List, Optional, Tuple
 from azure.storage.blob import BlobClient, BlobServiceClient, ContainerClient
 from loguru import logger
 
-from .globals import configs
-
-config = configs["chat-completion-model"]
-
 
 class AzurePDFContainerClient:
-    def __init__(self, container_name: str = "default_container"):
+    def __init__(
+        self,
+        connection_string: str,
+        container_name: str = "default_container",
+        root_path_ingestion: str = "../",
+    ):
         """
         Initialize the Azure PDF container client with a specified container name.
 
@@ -24,9 +25,10 @@ class AzurePDFContainerClient:
             container_name (str): Name of the container to manage. Defaults to "default_container".
         """
         self.client: BlobServiceClient = BlobServiceClient.from_connection_string(
-            config.AZURE_STORAGE_CONNECTION_STRING
+            connection_string
         )
         self.container_name: str = container_name
+        self.root_path_ingestion = root_path_ingestion
         self._ensure_container_exists()
 
     def _ensure_container_exists(self) -> None:
@@ -70,29 +72,28 @@ class AzurePDFContainerClient:
             logger.error(f"Error downloading blob '{blob_name}': {e}")
             return None
 
+    def ensure_download_directory(self, download_dir_name_: str) -> Tuple[str, str]:
+        """Ensure download directory exists and return paths to the ingestion and download directories.
 
-def ensure_download_directory(download_dir_name_: str) -> Tuple[str, str]:
-    """Ensure download directory exists and return paths to the ingestion and download directories.
+        Args:
+            index_name (str): The name of the index to create a unique download directory.
 
-    Args:
-        index_name (str): The name of the index to create a unique download directory.
+        Returns:
+            Tuple[str, str]: Paths to the ingestion and download directories.
+        """
+        # Get current working directory
+        logger.info(f"Current working directory: {os.getcwd()}")
 
-    Returns:
-        Tuple[str, str]: Paths to the ingestion and download directories.
-    """
-    # Get current working directory
-    logger.info(f"Current working directory: {os.getcwd()}")
+        # Construct ingestion and download directories
+        ingestion_directory = os.path.join(self.root_path_ingestion, download_dir_name_)
+        download_directory = os.path.join(ingestion_directory, "downloads")
 
-    # Construct ingestion and download directories
-    ingestion_directory = os.path.join(config.ROOT_PATH_INGESTION, download_dir_name_)
-    download_directory = os.path.join(ingestion_directory, "downloads")
+        # Log the directories
+        logger.info(f"Root ingestion path: {self.root_path_ingestion}")
+        logger.info(f"Ingestion directory: {ingestion_directory}")
+        logger.info(f"Download directory: {download_directory}")
 
-    # Log the directories
-    logger.info(f"Root ingestion path: {config.ROOT_PATH_INGESTION}")
-    logger.info(f"Ingestion directory: {ingestion_directory}")
-    logger.info(f"Download directory: {download_directory}")
+        # Ensure the download directory exists
+        os.makedirs(download_directory, exist_ok=True)
 
-    # Ensure the download directory exists
-    os.makedirs(download_directory, exist_ok=True)
-
-    return ingestion_directory, download_directory
+        return ingestion_directory, download_directory

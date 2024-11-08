@@ -6,12 +6,13 @@ from environs import Env
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncAzureOpenAI
 
-from .config import ModelConfig
 from .globals import clients, configs
 
 
 @contextlib.asynccontextmanager
 async def lifespan(app: fastapi.FastAPI):
+
+    from .config import ModelConfig
 
     configs["chat-completion-model"] = ModelConfig()
 

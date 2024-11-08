@@ -1,15 +1,6 @@
 import os
 from dataclasses import dataclass
 
-from dotenv import load_dotenv
-from loguru import logger
-
-try:
-    load_dotenv(".env.local")
-    logger.info("Read env.local")
-except:
-    pass
-
 
 @dataclass
 class ModelConfig:
@@ -24,7 +15,7 @@ class ModelConfig:
     )
     AZURE_OPENAI_API_KEY: str = os.getenv("AZURE_OPENAI_KEY", "")
     AZURE_OPENAI_ENDPOINT: str = os.getenv("AZURE_OPENAI_ENDPOINT", "")
-    MODEL_DEPLOYMENT: str = os.getenv("AZURE_OPENAI_CHATGPT_DEPLOYMENT", "")
+    MODEL_DEPLOYMENT: str = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "")
     AZURE_STORAGE_CONNECTION_STRING: str = os.getenv(
         "AZURE_STORAGE_CONNECTION_STRING", ""
     )

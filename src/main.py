@@ -1,7 +1,5 @@
-import json
 import os
 import time
-from functools import lru_cache
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
@@ -64,6 +62,7 @@ async def custom_skill(request: RequestData, scenario: str):
 
     oaiclient = clients["chat-completion-model"]
     oaiconfig = configs["chat-completion-model"]
+
     try:
         # Validate scenario
         if not scenario:
@@ -77,6 +76,7 @@ async def custom_skill(request: RequestData, scenario: str):
 
         # Initialize configurations
         validate_environment()
+        logger.info(f"{oaiconfig}")
 
         response_values = []
         for request_body in input_values:
