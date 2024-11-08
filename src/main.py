@@ -1,57 +1,23 @@
-import contextlib
 import json
 import os
 import time
 from functools import lru_cache
 from typing import Any, Dict
 
-import fastapi
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException
 from loguru import logger
-from openai import AsyncAzureOpenAI
 
-from models import CustomSkillException, ModelConfig, RequestData
-from utils import format_response, prepare_messages
+from .custom_prompts import custom_prompts
+from .globals import clients, configs
+from .models import CustomSkillException, RequestData
+from .requests_utils import format_response, prepare_messages
 
-clients = {}
-
-
-@contextlib.asynccontextmanager
-async def lifespan(app: fastapi.FastAPI):
-
-    config = ModelConfig()
-
-    client = AsyncAzureOpenAI(
-        api_key=config.api_key,
-        api_version=config.api_version,
-        azure_endpoint=config.endpoint,
-        timeout=config.timeout,
-        max_retries=config.retry_attempts,
-    )
-
-    clients["chat-completion-model"] = client
-    yield
-    await clients["chat-completion-model"].close()
-
-
-app = fastapi.FastAPI(docs_url="/", lifespan=lifespan)
-
-
-@lru_cache(maxsize=1)
-def load_custom_prompts() -> Dict[str, str]:
-    """Load and cache custom prompts from JSON file."""
-    try:
-        with open("custom_prompts.json", "r") as file:
-            prompts = json.load(file)
-            logger.info("Custom prompts loaded successfully.")
-            return prompts
-    except Exception as e:
-        logger.error(f"Failed to load custom prompts: {e}")
-        raise CustomSkillException("Failed to load custom prompts", 500)
+router = APIRouter()
 
 
 def validate_environment() -> tuple[str, str]:
     """Validate required environment variables."""
+
     api_key = os.getenv("AZURE_OPENAI_KEY")
     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 
@@ -63,19 +29,11 @@ def validate_environment() -> tuple[str, str]:
     return api_key, endpoint
 
 
-async def call_azure_openai(
-    client, payload: Dict[str, Any], config: ModelConfig
-) -> Dict[str, Any]:
+async def call_azure_openai(client, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Make HTTP request to Azure OpenAI using official async client."""
 
     try:
-        response = await client.chat.completions.create(
-            model=config.model_deployment,
-            messages=payload["messages"],
-            temperature=payload.get("temperature", 0.7),
-            top_p=payload.get("top_p", None),
-            max_tokens=payload.get("max_tokens", 4096),
-        )
+        response = await client.chat.completions.create(**payload)
 
         return response.model_dump()
 
@@ -86,25 +44,26 @@ async def call_azure_openai(
         raise CustomSkillException(f"Request failed: {str(e)}", 500)
 
 
-@app.get("/api/health")
+@router.get("/api/health")
 async def health_check():
     """Health check endpoint"""
     try:
         validate_environment()
-        load_custom_prompts()
-
         return {
             "status": "Healthy",
             "timestamp": time.time(),
-            "checks": {"environment": "OK", "prompts": "OK"},
+            "checks": {"environment": "OK"},
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/custom_skill")
+@router.post("/api/custom_skill")
 async def custom_skill(request: RequestData, scenario: str):
     """Main custom skill endpoint"""
+
+    oaiclient = clients["chat-completion-model"]
+    oaiconfig = configs["chat-completion-model"]
     try:
         # Validate scenario
         if not scenario:
@@ -118,8 +77,6 @@ async def custom_skill(request: RequestData, scenario: str):
 
         # Initialize configurations
         validate_environment()
-        custom_prompts = load_custom_prompts()
-        config = ModelConfig()
 
         response_values = []
         for request_body in input_values:
@@ -127,15 +84,15 @@ async def custom_skill(request: RequestData, scenario: str):
                 messages = prepare_messages(request_body, scenario, custom_prompts)
                 request_payload = {
                     "messages": messages,
-                    "temperature": config.temperature,
-                    "top_p": config.top_p,
-                    "max_tokens": config.max_tokens,
+                    "temperature": oaiconfig.temperature,
+                    "top_p": oaiconfig.top_p,
+                    "max_tokens": oaiconfig.max_tokens,
+                    "model": oaiconfig.MODEL_DEPLOYMENT,
                 }
 
                 response_json = await call_azure_openai(
-                    clients["chat-completion-model"],
+                    oaiclient,
                     payload=request_payload,
-                    config=config,
                 )
 
                 response_text = response_json["choices"][0]["message"]["content"]
